@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+
+
+  <!-- Author: Austin Steeno -->
+  <!-- Email: austin.steeno@gmail.com -->
+  <!-- Twitter: @EndainGaming -->
+
+
+  <head>
+
+    <meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>Spatial Querying Basics</title>
+
+    <!-- Script includes -->
+    <script src="js/lib/jquery-1.11.3.min.js"></script>
+    <script src="js/lib/bootstrap-3.3.5.min.js"></script>
+    <script src="js/lib/three-r73.min.js"></script>
+    <script src="js/lib/highlight-8.9.1.min.js"></script>
+
+    <!-- Style includes -->
+    <link href="css/lib/roboto.css" rel="stylesheet" type="text/css">
+    <link href="css/lib/bootstrap-3.3.5.min.css" rel="stylesheet" type="text/css">
+    <link href="css/lib/github.css" rel="stylesheet" type="text/css">
+    <link href="css/primary.css" rel="stylesheet" type="text/css">
+
+    <!-- Custom  webGL shaders to support per-line-segment color -->
+    <script type="x-shader/x-vertex" id="vs-line">
+      attribute vec4 color;
+
+      varying vec4 vColor;
+
+      void main() {
+
+        vColor = color;
+
+        vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+        gl_Position = projectionMatrix * mvPosition;
+
+      }
+    </script>
+
+    <script type="x-shader/x-fragment" id="fs-line">
+      varying vec4 vColor;
+
+      void main() {
+
+        gl_FragColor = vColor;
+
+      }
+    </script>
+
+  </head>
+
+
+  <body>
+
+    <!-- Small visual flourish -->
+    <div class="flourish-light affix"></div>
+    <div class="flourish-dark affix"></div>
+
+    <!-- Main page structure -->
+    <div class="container">
+      <div class="row">
+
+        <!-- Content -->
+        <div class="col-md-9">
+
+          <div class="page-header">
+            <h1>Spatial Querying Basics</h1>
+          </div>
+
+
+          <!-- *** INTRODUCTION *** -->
+          <a id="introduction" class="h2 section-link" href="#introduction">Introduction</a>
+          <br />
+
+          <!-- * OVERVIEW * -->
+          <a id="introduction-overview" class="h4 section-link" href="#introduction-overview">Overview</a>
+          <p>
+            In this article we will explore some of the common methods of improving collision detection speed when dealing with large numbers of objects by utilizing spatial querying. We will also examine a basic implementation along with an interactive demo of each method written in Javascript. All source code will be provided in the credits section at the end of the article.
+          </p>
+          <br />
+
+          <!-- * QUERYING * -->
+          <a id="introduction-querying" class="h4 section-link" href="#introduction-querying">What is Spatial Querying</a>
+          <p>
+            In simple terms, spatial querying is finding all the "things" in a specified region of space. In the context of games and simulation this is generally finding what set of objects lie within a given 2D or 3D space, such as a bounding box, so we can perform further processing on those objects.
+          </p>
+          <br />
+
+          <!-- * PARTITIONING * -->
+          <a id="introduction-partitioning" class="h4 section-link" href="#introduction-partitioning">What is Spatial Partitioning</a>
+          <p>
+            Spatial partitioning refers to some method of breaking up space into chunks. This is particularly useful because it allows us to quickly find what objects lie in a given space without having to directly determine if every object in existence lies within that specified space. There are various methods of spatial partitioning, each with it's own pros and cons. In this article we will expolore some of these common methods and compare them from the perspective of realtime collision detection. More specifically we will consider how various methods handle objects with a wide range of sizes and varying amounts of dynamic (moving) objects.
+          </p>
+          <br />
+
+
+          <!-- *** PARTITIONING METHODS *** -->
+          <a id="partitioning" class="h2 section-link" href="#partitioning">Partitioning Methods</a>
+          <br />
+
+          <!-- * QUADTREE * -->
+          <a id="partitioning-quadtree" class="h4 section-link" href="#partitioning-quadtree">Quadtree</a>
+          <p>
+            Quadtrees (and their 3D extrapolation, octrees) are a way of sudividing 2D space recursively into smaller chunks. For example, consider a square that covers some area. We consider this square our top-level node in a tree. we then take this square and draw a line directly through the middle both horizontally and vertically, dividing it into 4 equal, smaller squares or rectangles. Each one of these squares becomes a child node to our top-level node. For each child node we then repeat this process until we have divided our space to our satisfaction.
+          </p>
+          <p>
+            We then use this recursively subdivided tree structure to store objects. When objects are inserted into the tree structure they are placed in the smallest subdivided space that can fully contain our object. When we later want to query our quadtree to find out what objects in the world collide with some given space we are able to narrow down the set of objects we have to check by discarding branches of the quadtree that do not collide with our query space.
+          </p>
+          <br />
+
+          <!-- * GRID * -->
+          <a id="partitioning-grid" class="h4 section-link" href="#partitioning-grid">Grid</a>
+          <p>
+            Another method of spatial partitioning is to use a simple grid. A Grid is just simply taking the desired finite space and breaking it up into equal subdivisions. The simplest way to visualize the grid os to just think of a piece of graphing paper, where the page is your finite space and each square is one cell in your grid. Grids are probably the simplest spatial partitioning method to implements because at it's core it can be modelled with a 2-dimensional array, when makes inserting, removing and accessing data very fast and simple.
+          </p>
+          <p>
+            When inserting an object into a grid we simply need to find all of the cells that the object collides with and them add the object to all of those cells. This is a relatively simple operation, requiring only simple arithmetic to calculate the array indices for a range of cells to intert into and then a simple loop to insert into all cells in the range. The remove and query operation also work in the same exact way.
+          </p>
+          <br />
+
+          <!-- * HASHING * -->
+          <a id="partitioning-hashing" class="h4 section-link" href="#partitioning-hashing">Hashing</a>
+          <p>
+            <p>
+            A third method of spatial partitioning is to use a called spatial hashing. Spatial hashing is nearly identical to using a grid, the biggest distinction is that instead of storing the cell data in a 2-dimensional, fixed size array the cells are stored in a hash map (or hash map of hash maps). This means that spatial hashing can acheive nearly the same performance as a grid with the added bonus that it is not constained to a finite set of space since hash maps to not have a fixed size. The hashing part of a spatial hash refers to the process of taking the coordinated of some object and tunring them into a unique key that corresponds to a cell.
+          </p>
+          <p>
+            Just like in a grid, when inserting objects into the spatial hash we need to find all of the cells that the object collides with and them add the object to all of those cells. The operation is marginally more complex that for a grid, instead of just looping through the range of cells that the object covers we need to analyze that range and generate a set of keys that will allow us to hash into the correct set of cells. Then we simply iterate over that set of keys. Again, the remove and query operations are performed in a nearly identical manner.
+          </p>
+          <br />
+
+          <!-- * PROS AND CONS * -->
+          <a id="partitioning-pro-con" class="h4 section-link" href="#partitioning-pro-con">Pros and Cons</a>
+          <p>
+            Below is a table comparing the strengths and weaknesses of the varying methods of spatial partitioning. Do <b>not</b> mistake this table as declaring which method is the best. All of these methods are valid and will perform best in situations that match their strengths, there is no silver-bullet solution that will perform the best in every situation or satisfy every possible requirement.
+          </p>
+          <table class="table table-bordered">
+            <tr>
+              <th style="width: 31%;"></th>
+              <th style="width: 23%;">Quadtree</th>
+              <th style="width: 23%;">Grid</th>
+              <th style="width: 23%;">Hashing</th>
+            </tr>
+            <tr>
+              <th data-toggle="tooltip" title="Is the partitioning method well suited for spaces with a known, fixed maximum size?">
+                Fixed Size
+              </th>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-remove bad"></span>
+              </td>
+            </tr>
+            <tr>
+              <th data-toggle="tooltip" title="Is the partitioning method well suited for handling objects with a wide range of sizes?">
+                Varying Object Size
+              </th>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-remove bad"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-remove bad"></span>
+              </td>
+            </tr>
+            <tr>
+              <th data-toggle="tooltip" title="Is the partitioning method well suited for situations where the objects contained are constantly moving?">
+                Dynamic Contents
+              </th>
+              <td>
+                <span class="glyphicon glyphicon-remove bad"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+            </tr>
+            <tr>
+              <th data-toggle="tooltip" title="Does the partitioning method require minimal memory?">
+                Memory Required
+              </th>
+              <td>
+                <span class="glyphicon glyphicon-minus mediocre"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-minus mediocre"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+            </tr>
+            <tr>
+              <th data-toggle="tooltip" title="Does the partitioning method handle inserting objects quickly?">
+                Insert Speed
+              </th>
+              <td>
+                <span class="glyphicon glyphicon-minus mediocre"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+            </tr>
+            <tr>
+              <th data-toggle="tooltip" title="Does the partitioning method handle removing objects quickly?">
+                Remove Speed
+              </th>
+              <td>
+                <span class="glyphicon glyphicon-minus mediocre"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+            </tr>
+            <tr>
+              <th data-toggle="tooltip" title="Does the partitioning method handle retreiving objects quickly?">
+                Query Speed
+              </th>
+              <td>
+                <span class="glyphicon glyphicon-minus mediocre"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+              <td>
+                <span class="glyphicon glyphicon-ok good"></span>
+              </td>
+            </tr>
+          </table>
+          <p>
+            In general, quadtrees and octrees are most suited to situations where there are many objects of varying sizes. This is due to the nested, subdivided nature of the underlying tree structure makes it easy for the structure to contain objects with vastly differing sizes and still efficiently narrow down the set of objects to check when querying. However, they are not generally well suited for spaces with many dynamic objects that are constantly moving. This is because the removing and inserting into the quadtree is a bit expensive compared to something like a grid. In a quadtree we have to traverse a tree structure and check multiple bounding boxes (each node) along the way, where as with a grid we are just directly indexing into memory. However, the cost of inserting and removing is still minimal compared to having no spatial partitioning at all. The support for a wide range of object sizes and the limitations involving dynamic objects make quadtree particularly well suited for storing the static 'world' or 'level' geometry. 
+          </p>
+          <p>
+            Grids are best suited for situations where there are many dynamic, similarly size objects - effectively the opposite when compared to a quadtree. Because the insert and remove operation are barely more that indexing directly to a memory location grids are particularly well suited when you have objects that need their positions updated in every step of your program. The biggest downside of grids is that the performance relies on the sizes of all your objects being similar. The ideal grid has cells as small as possible, but big enough to contain your largest object. There is a balance to be struck here, when you have varying object sizes if you make the cells too big then you will not be reducing the number of collision check to perform as effectively. If your cell size if too small compared to the average object size then you will be inserting many objects into more than one cell (potentially many, many cells) which will also negate your performance gains as it increases the insert, remove and query times.
+          </p>
+          <p>
+            Spatial hashes have very similar performance characteristics to grids, they are quite fast for insert, remove and query operations but have the same weaknesses when you have many objects larger than your cell size or make your cells too big. The perfomance of spatial hashing compared to grids is a bit slower, however, spatial hashes have one major advantage of both grids and quadtree: they are not limited to a finite size. When both grids and quadtree can only cover a limited area the only limit for spatial hashing is the limitation of number range and precision on your target platform - and even those could likely be worked around with some effort.
+          </p>
+          <br />
+
+
+          <!-- *** EXAMPLES *** -->
+          <a id="example" class="h2 section-link" href="#example">Examples</a>
+          <br />
+
+          <!-- * NO PARTITIONING * -->
+          <a id="example-none" class="h4 section-link" href="#example-none">No Partitioning</a>
+          <p>
+            Before we examine the performance and behavior and implementation details of various partitioning methods let us first examine the case where there is no spatial partitioning. Without some method of breaking our objects up into sections of space we are forced to consider all objects as part of the same space. This means that when we want to calculate the set of objects that intersects with one specific object that we have to check our object against every other object that exists.
+          </p>
+          <p>
+            Say for example that we have N objects in our space. If in every frame of a game or simulation we want to find out which objects that every single object in our scene intersects with then we will end up doing N * N collision detection, which can quickly grow to consume a large amount of time as N grows larger. We will use this as the baseline for all of our interactive demos. All of the demos will attempt to find, for every object, every object that collides with it. Every object that has at least one other object colliding with it will be drawning in red. There will also be a green box controlled by the user, every box that collised with the user's box will be light green. 
+          </p>
+          <p>
+            Take a look at the example scene below. In this example we do not use any space partitioning and instead compare every object against every other object. Try turning up the number of objects in the demo and watch how it affects the performance of the simulation.
+          </p>
+          <div class="panel panel-default example">
+            <div class="panel-heading">
+              <h5>Interactive Brute Force Collision Example</h5>
+            </div>
+            <div id="ex-basic" class="panel-body"></div>
+          </div>
+          <p>
+            Let's take a quick look at the code behind this demo. For the sake of simplicity across demos every spatial partitioning class will adhere to the same interface. Primarily this will consist of the <b><small>insert</small></b>, <b><small>remove</small></b>, and <b><small>intersects</small></b> method.
+          </p>
+          <p>
+            The <b><small>insert</small></b> method is responsible for adding the the object to the spatial partitioning structure so it can be queried later. In the case of no spatial partitioning this results in a noop, an operation that does nothing since without any spatial partition we just keep all our world object in the same store all the time. 
+          </p>
+          <pre>
+            <code>
+// Function to insert an object into the space partitioning structure
+Basic.prototype.insert = function ( obj ) {
+    // NO-OP
+}
+            </code>
+          </pre>
+          <p>
+            The <b><small>remove</small></b> method is responsible for removing the opbject from the spatial partitioning structure. Again, in the case of no-spatial partitioning this will also result in a noop since we don't have anything to remove, all objects should still exist.
+          </p>
+          <pre>
+            <code>
+// Function to remove an object from the space partitioning structure
+Basic.prototype.remove = function ( obj ) {
+    // NO-OP
+}
+            </code>
+          </pre>
+          <p>
+            The <b><small>intersects</small></b> method is responsible for querying the spatial partitioning structure and returning a set (in this case a <b><small>DynamicBuffer</small></b>) of all the objects that intersect to object given. In our no-partitioning space partition class we take the most naive approach and simply compare the query box against every existing object. If the object collides, then we add it to our result set. This <b><small>intersects</small></b> method is called for every box in the demo, giving us N * N collision checks.
+          </p>
+          <pre>
+            <code>
+// Function to query the space partitioning structure for objects that intersect in the given bounding box
+Basic.prototype.intersects = function ( obj, result ) {
+    // Get/create buffer to store objects that intersect
+    if ( !result )
+        result = new DynamicBuffer();
+
+    // Clear the buffer
+    result.clear();
+
+    // Basic brute force intersection test - we test against every other object
+    var stored;
+    for ( var i = 0; i &lt; this.data.count; i++ ) {
+        // Get the current box
+        stored = this.data.data[ i ];
+
+        // Check for intersection
+        if ( obj !== stored ) {
+            if ( obj.isIntersectionBox( stored ) || obj.containsBox( stored ) || stored.containsBox( obj ) )
+                result.push( stored );
+        }
+    }
+
+    // Return the result set buffer
+    return result;
+}
+            </code>
+          </pre>
+          <p>
+            It's worth noting that every spatial partitioning class has other methods and a little bit more going on under the hood, but the <b><small>insert</small></b>, <b><small>remove</small></b>, and <b><small>intersects</small></b> methods are where the bulk of the logic and computation exists, so we will only examine these methods in detail. If you are interested in delving deeper into the code the full source is available in the credits section at the end of the article.
+          </p>
+          <p>
+            Additionally you may have noticed that we used a class called <b><small>DynamicBuffer</small></b> in the intersection code. This is a small class that functions like a <a href="https://en.wikipedia.org/wiki/Dynamic_array">Dynamic Array</a>, similar to 'ArrayList' in Java or 'vector' in C++. If you are curious what exactly <b><small>DynamicBuffer</small></b> does it is also included in the source in the credits section.
+          </p>
+          <br />
+
+          <!-- * QUADTREE * -->
+          <a id="example-quadtree" class="h4 section-link" href="#example-quadtree">Quadtree</a>
+          <p>
+            First up we will examine using a quadtree for spatial partitioning. As mentioned previously a quadtree works by recursively subdividing a space into a tree structure with the goal of adding items as deep in the tree as possible. To help visualize how the quadtree is working the paramters of the visualization have been tweaked slightly. Boxes will now be faded more the deeper they are in the tree, so if a box is completely solid that means that it is in the highest level node in the tree and if it is very dim and transparent that means it is in (or almost in) a leaf node in the tree.
+          </p>
+          <p>
+            Additionally we will also draw subtle blue boxes around the boundaries of every node in the tree. The boxes are only visible if there are any objects contained within the nodes. Also, just like the box objects, the boxes that represent the nodes will be brighter and more solid towards the top of the tree and dimmer and more transparent the deeper they are in the tree.
+          </p>
+          <p>
+            Go ahead and play with this visualization below and see how it behaves:
+          </p>
+          <div class="panel panel-default example">
+            <div class="panel-heading">
+              <h5>Interactive Quadtree Example</h5>
+            </div>
+            <div id="ex-quadtree" class="panel-body"></div>
+          </div>
+          <p>
+            Some interesting things are worth noting about the quadtree. First, notice how the box objects get brighter as they cross node boundries. This means they are moving up higher in the tree which is what we would expect since our goal when inserting into the quadtree is to insert into the deepest node possible that still fully contains the object. This has an unfortunate side effect in that objects that lie along node boundries (especially in the exact middle of out quadtree) will be places higher in the tree, meaning that they will be less likely to be discarded when checking for collisions which can impact performance.
+          </p>
+          <p>
+            Second, take a moment and try cranking up the amount of boxes as well as the selection box size. Notice that regardless of where we move the selection box, even if we move our mouse to the very bottom corner so that most of our box is off-screen the time taken to calculate collisions (shown in the bottom right) does not change. Try this again later on in the grid and hashing demos and note how those behave.
+          </p>
+          <br />
+          <p>
+            Now lets take a look at the code for the quadtree. The <b><small>Quadtree</small></b> class adheres to the same interface we previously described and has the <b><small>insert</small></b>, <b><small>remove</small></b>, and <b><small>intersects</small></b> methods. However, the implementation of the quadtree is broken into two classes, <b><small>Quadtree</small></b> and <b><small>Quadnode</small></b>, so we will also examine the relevent calls into <b><small>Quadnode</small></b> as well.
+          </p>
+          <p>
+            First is the <b><small>insert</small></b> method of the quadtree. At the <b><small>Quadtree</small></b> level we are simply calling the <b><small>insert</small></b> method of the root <b><small>Quadnode</small></b> and if we cannot insert into any node for some reason we add it to some world-level buffer.
+          </p>
+          <pre>
+            <code>
+// Function to insert and object into the quadtree
+Quadtree.prototype.insert = function ( obj ) {
+    // Attempt to insert the object
+    if ( !this.root.insert( obj, obj.center() ) ) {
+        // If we could not insert it just add it to the global object store
+        this.data.push( obj );
+    }
+}
+            </code>
+          </pre>
+          <p>
+            In the <b><small>Quadnode</small></b>'s <b><small>insert</small></b> method we do the actual work of recursing and inserting the object. We first check if our object fits inside the node, if not we simply return false to indicate that we could not insert the object in this node (and thus none of this node's child nodes). If this object does fit into this node then we need to first check if it can fit into any of this nodes children (his is the recursive part of the quadtree insertion). If we could not insert into any child node or we have already reached a leaf node then we simply add the object to this nodes data buffer.
+          </p>
+          <pre>
+            <code>
+// Function to insert an object into the node
+Quadnode.prototype.insert = function ( obj, center ) {
+    // Check if the object fits in this node
+    if ( this.box.containsBox( obj ) ) {
+        // Before we insert into this node, check if there is a valid child we can add to instead
+        if ( !this.leaf ) {
+            if ( center.y &lt;= this.center.y ) {
+                if ( center.x &lt;= this.center.x ) {
+                    if ( this.nw.insert( obj, center ) )
+                        return true;
+                } else {
+                    if ( this.ne.insert( obj, center ) )
+                        return true;
+                }
+            } else {
+                if ( center.x &lt;= this.center.x ) {
+                    if ( this.sw.insert( obj, center ) )
+                        return true;
+                } else {
+                    if ( this.se.insert( obj, center ) )
+                        return true;
+                }
+            }
+        }
+
+        // If no valid child to insert into, add to this node
+        this.data.push( obj );
+        return true;
+    } else {
+        // Return false if the object could not be inserted
+        return false;
+    }
+}
+            </code>
+          </pre>
+          <p>
+            Next, the <b><small>remove</small></b> method of the <b><small>Quadtree</small></b> is just like the <b><small>insert</small></b> method, it simply calls through to the root <b><small>Quadnode</small></b>'s insert method, opting to remoive from the world-level data buffer if it was not able to be removed from any node.
+          </p>
+          <pre>
+            <code>
+// Function to remove an object from the quadtree
+Quadtree.prototype.remove = function ( obj ) {
+    // Attempt to remove the object
+    if ( !this.root.remove( obj, obj.center() ) ) {
+        // If we could not remove it attempt to remove it from the global object store
+        this.data.remove( obj );
+    }
+}
+            </code>
+          </pre>
+          <p>
+            In the <b><small>Quadnode</small></b>'s <b><small>remove</small></b> method we do the actual work of recursing and inserting the object. We first check if our object fits inside the node, if not we simply return false to indicate that we could not insert the object in this node (and thus none of this node's child nodes). If this object does fit into this node then we need to first check if it can fit into any of this nodes children (his is the recursive part of the quadtree insertion). If we could not insert into any child node or we have already reached a leaf node then we simply add the object to this nodes data buffer.
+          </p>
+          <pre>
+            <code>
+// Function to remove an object from the node
+Quadnode.prototype.remove = function ( obj, center ) {
+    // Check if the object fits in this node
+    if ( this.box.containsBox( obj ) ) {
+        // Before we attempt to remove from this node, check if there is a valid child we remove from instead
+        if ( !this.leaf ) {
+            if ( center.y &lt;= this.center.y ) {
+                if ( center.x &lt;= this.center.x ) {
+                    if ( this.nw.remove( obj, center ) )
+                        return true;
+                } else {
+                    if ( this.ne.remove( obj, center ) )
+                        return true;
+                }
+            } else {
+                if ( center.x &lt;= this.center.x ) {
+                    if ( this.sw.remove( obj, center ) )
+                        return true;
+                } else {
+                    if ( this.se.remove( obj, center ) )
+                        return true;
+                }
+            }
+        }
+
+        // If no valid child to remove from, remove from this node
+        return this.data.remove( obj );
+    } else {
+        // Return false if the object could not be removed
+        return false;
+    }
+}
+            </code>
+          </pre>
+          <p>
+            Lastly the <b><small>intersects</small></b> method of the <b><small>Quadtree</small></b> does a little more than the <b><small>insert</small></b> and <b><small>remove</small></b> methods did. The <b><small>intersects</small></b> method first prepares a results buffer to store a set of all colliding objects. Then it iterates over all objects in the world-level object buffer and adds any objects from that set that collide with our given region. Next it calls the <b><small>intersects</small></b> method of the root <b><small>Quadnode</small></b> that add collisions from any relevant nodes to the results set.
+          </p>
+          <pre>
+            <code>
+// Function to query the quadtree for objects that intersect in the given object
+Quadtree.prototype.intersects = function ( obj, result ) {
+    // Get/create buffer to store objects that intersect
+    if ( !result )
+        result = new DynamicBuffer();
+
+    // Clear the buffer
+    result.clear();
+
+    // Test the object against all global objects
+    var stored;
+    for ( var i = 0; i &lt; this.data.count; i++ ) {
+        // Get the current stored object
+        stored = this.data.data[ i ];
+
+        // Check for intersection
+        if ( obj !== stored ) {
+            if ( obj.isIntersectionBox( stored ) || obj.containsBox( stored ) || stored.containsBox( obj ) )
+                result.push( stored );
+        }
+    }
+
+    // Look for intersections in valid child nodes
+    this.root.intersects( obj, obj.center(), result );
+
+    // Return the result set buffer
+    return result;
+}
+            </code>
+          </pre>
+          <p>
+            In the <b><small>intersects</small></b> method of the <b><small>Quadnode</small></b> we do almost the same thing as in the <b><small>Quadtree</small></b>. First we make sure our given region collides with the node itself. If it does collide then we test our region for collisions with all objects stored in this nodes data buffer, adding any object that collides to our result set. Finally, if the node is not a leaf node then we recurse and repeat this process for each of the nodes children.
+          </p>
+          <pre>
+            <code>
+// Function query a quadnode to determine if it has any objects intersecting the given object
+Quadnode.prototype.intersects = function ( obj, center, result ) {
+    // Check if this node overlaps with the object, if not, abort
+    if ( !this.box.isIntersectionBox( obj ) &amp;&amp; !this.box.containsBox( obj ) )
+        return result;
+
+    // Test the object against all objects in this node
+    var stored;
+    for ( var i = 0; i &lt; this.data.count; i++ ) {
+        // Get the current stored object
+        stored = this.data.data[ i ];
+
+        // Check for intersection
+        if ( obj !== stored ) {
+            if ( obj.isIntersectionBox( stored ) || obj.containsBox( stored ) || stored.containsBox( obj ) )
+                result.push( stored );
+        }
+    }
+
+    // Check all child nodes
+    if ( !this.leaf ) {
+        this.nw.intersects( obj, center, result );
+        this.ne.intersects( obj, center, result );
+        this.sw.intersects( obj, center, result );
+        this.se.intersects( obj, center, result );
+    }
+
+    // Return the result set
+    return result;
+}
+            </code>
+          </pre>
+          <p>
+            The quadtree has the most complicated implementations of the three partitioning methods we will examine. For further reading you could check out the <a href="https://en.wikipedia.org/wiki/Quadtree">Wikipedia article on quadtrees</a>. The topic is also well cover on the web in general, resources should be plentiful.
+          </p>
+          <br />
+
+          <!-- * GRID * -->
+          <a id="example-grid" class="h4 section-link" href="#example-grid">Grid</a>
+          <p>
+            Next lets examine using a grid for spatial partitioning. Recall that grids work by taking a finite area of space and then equally dividing that space horizotnally and vertically into cells of equal size. Grids are a natural use case for a 2-dimensional array or table, which means that access to the object data in this spatial partition is extremely quick, all that is required is some integer arithmetic to map an onbject position to a cell index and then the cell can be accessed directly, without any additional collision check like in a quadtree.
+          </p>
+          <p>
+            For this visualization we will tweak the visualization parameters again. Like in the quadtree demo we will draw light blue boxes around each of the cells in the grid, but only if that grid cell has some objects stored in it. However in the grid everything will be the same brightness as there is no concept of depth like with the quadtree. The rest of the visualization remains the same, objects colliding with at least one other object are red, objects that collise with the user selection box are light green.
+          </p>
+          <p>
+            You can play with this visualization below and see how it behaves:
+          </p>
+          <div class="panel panel-default example">
+            <div class="panel-heading">
+              <h5>Interactive Grid Example</h5>
+            </div>
+            <div id="ex-grid" class="panel-body"></div>
+          </div>
+          <p>
+            First off you probably noticed that the grid is faster than the quadtree in general. This is in part due to the dead simple cell lookups and very fast data access, but beyond that we have tuned our grid relatively well for our objects. Notice that none of the boxes in the visualization will ever overlap more than 4 grid cells. This is good because as we overlap more cells it slows down the insert, remove and query operations since the indexing is repeated for each cell we overlap which can negate our performance gains.
+          </p>
+          <p>
+            We can actaully see how having objects significantly larger than the cell size can adversely affect performance. If we repeat the experiment we did with the quadtree where we maximize the number of boxes and the size of our selection box you will notice that as we move the selection box towards the corner of the screen (so it covers less grid cells) the performance improves (the milliseconds per step tracker in the bottom left should drop by around 1ms). If we can alter the performance by nearly 1ms just by having one large box imagine if the majority of the boxes covered four or more cells. This underscores the importance of having a properly tuned grid and how grids may not be the best choice when dealing with a wide range of object sizes.
+          </p>
+          <br />
+          <p>
+            Now lets examine the code for the grid. The <b><small>Grid</small></b> class again adheres to the same interface as our other spatial partitioning classes. Compared to the quadtree the implementation of the grid class is much more straightforward to implement and only requires the <b><small>Grid</small></b> class itself.
+          </p>
+          <p>
+            The <b><small>insert</small></b> method of the <b><small>Grid</small></b> takes an object and then uses the minimum and maximum points of the objects bounding box and, using simple integer arithmetic, converts those minimum and maximum world coordinates into grid cell coordinates (indexes into a 2-dimensional array). Next, some simple bounding logic is performed to ensure that we don't attempt to access cells that are outside of range of our grid's data table. Then we simply iterate through the cell range we calculated and insert our object into each of those cells.
+          </p>
+          <pre>
+            <code>
+// Function to insert and object into the grid
+Grid.prototype.insert = function ( obj ) {
+    // Find the range of cells the object covers
+    var xMin = ~~( obj.min.x / this.sizeX );
+    var yMin = ~~( obj.min.y / this.sizeY );
+    var xMax = ~~( obj.max.x / this.sizeX );
+    var yMax = ~~( obj.max.y / this.sizeY );
+
+    // Bound the min/max values
+    if ( xMin &lt; 0 )
+        xMin = 0;
+    if ( yMin &lt; 0 )
+        yMin = 0;
+    if ( xMax &gt;= this.divisionsX )
+        xMax = this.divisionsX - 1;
+    if ( yMax &gt;= this.divisionsY )
+        yMax = this.divisionsY - 1;
+
+    // Insert the object into all cells
+    var x, y;
+    for ( y = yMin; y &lt;= yMax; y++ )
+        for ( x = xMin; x &lt;= xMax; x++ )
+            this.data[ y ][ x ].push( obj );
+}
+            </code>
+          </pre>
+          <p>
+            Note that the grid has some pre-computed variables called <b><small>sizeX</small></b>, <b><small>sizeY</small></b>, <b><small>divisionsX</small></b> and <b><small>divisionsY</small></b>. When we created the grid it was given a size that matched the visible world space from our demo. The <b><small>divisionsX</small></b> and <b><small>divisionsY</small></b> variables defined how many times we wanted to subdivide that space both horizotally and vertically. Using the divisions variables and the overall size of our grid the <b><small>sizeX</small></b> and <b><small>sizeY</small></b> variables can be calculated and represent the x and y size of each cell in world-coordinates.
+          </p>
+          <p>
+            Next, the <b><small>remove</small></b> method of the of <b><small>Grid</small></b> is almost exactly identical to the <b><small>insert</small></b> method. We perform the same steps of computing a cell range, bounding the range, then looping through that range and simply remove the object from each cells data buffer instead of inserting it.
+          </p>
+          <pre>
+            <code>
+// Function to remove an object from the grid
+Grid.prototype.remove = function ( obj ) {
+    // Find the range of cells the object covers
+    var xMin = ~~( obj.min.x / this.sizeX );
+    var yMin = ~~( obj.min.y / this.sizeY );
+    var xMax = ~~( obj.max.x / this.sizeX );
+    var yMax = ~~( obj.max.y / this.sizeY );
+
+    // Bound the min/max values
+    if ( xMin &lt; 0 )
+        xMin = 0;
+    if ( yMin &lt; 0 )
+        yMin = 0;
+    if ( xMax &gt;= this.divisionsX )
+        xMax = this.divisionsX - 1;
+    if ( yMax &gt;= this.divisionsY )
+        yMax = this.divisionsY - 1;
+
+    // Remove the object from all cells
+    var x, y;
+    for ( y = yMin; y &lt;= yMax; y++ )
+        for ( x = xMin; x &lt;= xMax; x++ )
+            this.data[ y ][ x ].remove( obj );
+}
+            </code>
+          </pre>
+          <p>
+            Lastly we look at the <b><small>intersects</small></b> method. Again is is similar to our <b><small>insert</small></b> and <b><small>remove</small></b> methods, but we now have to deal with actually checking for collisions. We start by preparing a result buffer to store all colliding objects in. After that we follow the same pattern as before: calculate a cell range, bound the cell range, loop through the cell range. Now instead of adding or removing for every cell we instead check for collisions with every object stored in that cells data buffer. Additionally, since our objects can span multiple cells, when we find an object that collides we need to ensure that the object is not already in our result set since it may have existed in another cell and been added to the result set previously.
+          </p>
+          <pre>
+            <code>
+// Function to query the grid for objects that intersect in the given bounding box
+Grid.prototype.intersects = function ( obj, result ) {
+    // Get/create buffer to store objects that intersect
+    if ( !result )
+        result = new DynamicBuffer();
+
+    // Clear the buffer
+    result.clear();
+
+    // Find the range of cells the object covers
+    var xMin = ~~( obj.min.x / this.sizeX );
+    var yMin = ~~( obj.min.y / this.sizeY );
+    var xMax = ~~( obj.max.x / this.sizeX );
+    var yMax = ~~( obj.max.y / this.sizeY );
+
+    // Bound the min/max values
+    if ( xMin &lt; 0 )
+        xMin = 0;
+    if ( yMin &lt; 0 )
+        yMin = 0;
+    if ( xMax &gt;= this.divisionsX )
+        xMax = this.divisionsX - 1;
+    if ( yMax &gt;= this.divisionsY )
+        yMax = this.divisionsY - 1;
+
+    // Return all objects from all the cells it covers if they intersect
+    var x, y, i, buffer, stored;
+    for ( y = yMin; y &lt;= yMax; y++ ) {
+        for ( x = xMin; x &lt;= xMax; x++ ) {
+            buffer = this.data[ y ][ x ];
+            for ( i = 0; i &lt; buffer.count; i++ ) {
+                // Get the current stored object
+                stored = buffer.data[ i ];
+
+                // Check if the object overlaps
+                if ( obj !== stored ) {
+                    if ( obj.isIntersectionBox( stored ) || obj.containsBox( stored ) || stored.containsBox( obj ) ) {
+                        // Only add the object if we didn't add it already
+                        if ( !result.contains( stored ) )
+                            result.push( stored );
+                    }
+                }
+            }
+        }
+    }
+
+    // Return the result set buffer
+    return result;
+}
+            </code>
+          </pre>
+          <br />
+
+          <!-- * HASHING * -->
+          <a id="example-hashing" class="h4 section-link" href="#example-hashing">Hashing</a>
+          <p>
+            Last we will take a look at spatial hashing. Recall that spatial hashing works almost the same as a grid, opting to use a hash map (or in our implementation a hash map of hash maps) as a data store instead of a 2-dimensional array. Instead of calculating integer array indices from objects we instead compute a set of hash keys and iterate over the keys, reading or writing to the cell we have hased into. Because a spatial hash does not have a fixed size we do not need to specify its size or how many times it needs to be subdivided, instead we simply provide it with the cell size we want to use in world-coordinates.
+          </p>
+          <p>
+            The visualization paramaters for the sptaial hash are exactly the same as the grid. There is no concept of depth so no boxes will be faded and only cells that have objects stored in them will be rendered. Play with this visualization below and see how it behaves:
+          </p>
+          <div class="panel panel-default example">
+            <div class="panel-heading">
+              <h5>Interactive Hashing Example</h5>
+            </div>
+            <div id="ex-hashing" class="panel-body"></div>
+          </div>
+          <p>
+            Note that the spatial hash performs nearly as well as the grid and has almost identical the same performance characteristics. This also means it has the same weaknesses, if you repeat the experiment with many objects and a larger user selection box it will react just like the grid. However, the biggest benfit of the spatial hash is that the size of the spatial partition structure is not fixed. We can see that unlike the grid which was subdivided evenly over the visualization space the cells of the spatial hash do not align to the edges of the visualization. This is a potentially huge benefit with a relatively low performance and complexity cost.
+          </p>
+          <br />
+          <p>
+            Lets examine the code for the <b><small>SpatialHash</small></b> class now. The <b><small>insert</small></b> method of the of <b><small>SpatialHash</small></b> is very similar to that of the <b><small>Grid</small></b> class. In our implementation we opted to use a hash map of hash maps, where the first has map corresponds to a row in space and the nested hash map represents a column and points to a specific cell defined by the row and column combination. In Javascript the implementation is very simple since objects behave just like hash maps. We can utilize the same logic from our grid methods, but instead of using range numbers we get as indexes into a 2-dimensional array we use them as row keys and column keys for our hash maps. So the logic is as follows: calculate a range of numeric keys that would cover all the cells to insert into, iterate over the row keys (if the row does not exist, create it), in the row iterate over the column keys (if the cell defined by the column key does not exist, create it), take the cell at corresponding to the row and column key combination and insert the object.
+          </p>
+          <pre>
+            <code>
+// Function to insert and object into the spatial
+SpatialHash.prototype.insert = function ( obj ) {
+    // Find the range of cells the object covers
+    var xMin = ~~( obj.min.x / this.sizeX );
+    var yMin = ~~( obj.min.y / this.sizeY );
+    var xMax = ~~( obj.max.x / this.sizeX );
+    var yMax = ~~( obj.max.y / this.sizeY );
+
+    // Insert the object into all cells
+    var x, y, row, cell;
+    for ( y = yMin; y &lt;= yMax; y++ ) {
+        // Get the row
+        row = this.data[ y ];
+
+        // Validate the the row exists
+        if ( !row ) {
+            this.data[ y ] = {};
+            row = this.data[ y ];
+        }
+
+        for ( x = xMin; x &lt;= xMax; x++ ) {
+            // Get the cell
+            cell = row[ x ];
+
+            // Validate the cell exists
+            if ( !cell ) {
+                row[ x ] = new DynamicBuffer();
+                cell = row[ x ];
+            }
+
+            // Insert the object into the cell
+            cell.push( obj );
+        }
+    }
+}
+            </code>
+          </pre>
+          <p>
+            The <b><small>remove</small></b> method of the of <b><small>SpatialHash</small></b> works just like the <b><small>insert</small></b> method with the only differences being that if a row or cell does not exist we simply skip to the next row or cell and that we call a remove method on the cells instead of an insert method.
+          </p>
+          <pre>
+            <code>
+// Function to remove an object from the spatial hash
+SpatialHash.prototype.remove = function ( obj ) {
+    // Find the range of cells the object covers
+    var xMin = ~~( obj.min.x / this.sizeX );
+    var yMin = ~~( obj.min.y / this.sizeY );
+    var xMax = ~~( obj.max.x / this.sizeX );
+    var yMax = ~~( obj.max.y / this.sizeY );
+
+    // Remove the object from all cells
+    var x, y, row, cell;
+    for ( y = yMin; y &lt;= yMax; y++ ) {
+        // Get the row
+        row = this.data[ y ];
+
+        // Validate the the row exists
+        if ( !row )
+            continue;
+
+        for ( x = xMin; x &lt;= xMax; x++ ) {
+            // Get the cell
+            cell = row[ x ];
+
+            // Validate the cell exists
+            if ( !cell )
+                continue;
+
+            // Remove the object from the cell
+            cell.remove( obj );
+        }
+    }
+}
+            </code>
+          </pre>
+          <p>
+            Lastly, we look at the <b><small>intersects</small></b> method of the of <b><small>SpatialHash</small></b>. Again, it is nearly the same as the <b><small>insert</small></b> and <b><small>remove</small></b> operations of the <b><small>SpatialHash</small></b> and similar to the <b><small>intersects</small></b> method from our <b><small>Grid</small></b> class. The basic flow is: prepare a result buffer to store collisions, get a set of unique cell keys (row and column span keys), iterate over and hash into rows, iterate over and hash into column, for the cell at the row / column combination check for collisions with every stored object, if a collision occured only store it if the object is not already in the result buffer.
+          </p>
+          <pre>
+            <code>
+// Function to query the spatial hash for objects that intersect in the given bounding box
+SpatialHash.prototype.intersects = function ( obj, result ) {
+    // Get/create buffer to store objects that intersect
+    if ( !result )
+        result = new DynamicBuffer();
+
+    // Clear the buffer
+    result.clear();
+
+    // Find the range of cells the object covers
+    var xMin = ~~( obj.min.x / this.sizeX );
+    var yMin = ~~( obj.min.y / this.sizeY );
+    var xMax = ~~( obj.max.x / this.sizeX );
+    var yMax = ~~( obj.max.y / this.sizeY );
+
+    // Return all objects from all the cells it covers if they intersect
+    var x, y, i, buffer, stored, row;
+    for ( y = yMin; y &lt;= yMax; y++ ) {
+        // Get the row
+        row = this.data[ y ];
+
+        // Validate the the row exists
+        if ( !row )
+            continue;
+
+        for ( x = xMin; x &lt;= xMax; x++ ) {
+            // Get the cell/buffer
+            buffer = row[ x ];
+
+            // Validate the cell/buffer exists
+            if ( !buffer )
+                continue;
+
+            for ( i = 0; i &lt; buffer.count; i++ ) {
+                // Get the current stored object
+                stored = buffer.data[ i ];
+
+                // Check if the object overlaps
+                if ( obj !== stored ) {
+                    if ( obj.isIntersectionBox( stored ) || obj.containsBox( stored ) || stored.containsBox( obj ) ) {
+                        // Only add the object if we didn't add it already
+                        if ( !result.contains( stored ) )
+                            result.push( stored );
+                    }
+                }
+            }
+        }
+    }
+
+    // Return the result set buffer
+    return result;
+}
+            </code>
+          </pre>
+          <br />
+
+
+          <!-- *** CONCLUSION *** -->
+          <a id="conclusion" class="h2 section-link" href="#conclusion">Conclusion</a>
+          <br />
+
+          <!-- * OTHER METHODS * -->
+          <a id="conclusion-methods" class="h4 section-link" href="#conclusion-methods">Other Methods</a>
+          <p>
+            While quadtrees, grids and and spatial hashing are the three most well-known spatial partitioning methods there are many other methods avaiable. All of the methods covered here are only for 2D worlds, but all of them can be easily extrapolated to work in 3D worlds. In 3D, quadtrees become <a href="https://en.wikipedia.org/wiki/Octree">octrees</a> with 8 children instead of 4, grids become backed by 3-dimensional arrays instead of 2-dimensional arrays, and spatial hashing just has to take into a count one more dimension in hash key generation (and possibly one level deeper nesting of hash maps if you are using nested hash maps). There are other methods entirely, such as <a href="https://en.wikipedia.org/wiki/Binary_space_partitioning">BSP-trees</a> (Binary space partitioning trees) and <a href="https://en.wikipedia.org/wiki/R-tree">R-trees</a>. There are also hierarchical grids which are somewhat of a hybrid between quadtrees and grids which attempt to average out the pros and cons of each.
+          </p>
+          <br />
+
+          <!-- * FINAL THOUGHTS * -->
+          <a id="conclusion-thoughts" class="h4 section-link" href="#conclusion-thoughts">Final Thoughts</a>
+          <p>
+            It is important to remember that there is no silver bullet when it comes to spatial partitioning. All of the methods shown here have varying strengths and weaknesses and all of them can be tuned to work even better in your specific situation.
+          </p>
+          <p>
+            Hopefully the imformation and examples in this article have given you a good starting point for speeding up your collision detection and spatial querying processes. Full source code for the quadtree, grid, and spatial hash implementation, along with all other code used in this article is avaialable in the credits section below. If you found any errors in this article or have any further question feel free to reach out to me via Twitter (my handle is listed below).  
+          </p>
+          <p>
+            Thank you and happy programming!
+          </p>
+          <br />
+
+          <!-- * CREDITS * -->
+          <a id="conclusion-credits" class="h4 section-link" href="#conclusion-credits">Credits</a>
+          <p>
+            Written and maintained by <a href="https://twitter.com/endaingaming">@EndainGaming</a>.
+          </p>
+          <p>
+            Sources coming soon.
+          </p>
+          <br />
+
+        </div>
+
+        <!-- Navigation -->
+        <div class="col-md-3">
+          <nav id="nav" class="hidden-print hidden-xs hidden-sm affix">
+            <ul class="nav">
+
+              <!-- Introduction -->
+              <li>
+                <a class="section" href="#introduction">Introduction</a>
+                <ul class="nav">
+                  <li>
+                    <a href="#introduction-overview">Overview</a>
+                  </li>
+                  <li>
+                    <a href="#introduction-querying">What is Spatial Querying</a>
+                  </li>
+                  <li>
+                    <a href="#introduction-partitioning">What is Spatial Partitioning</a>
+                  </li>
+                </ul>
+              </li>
+
+              <!-- Spatial Partitioning -->
+              <li>
+                <a class="section" href="#partitioning">Partitioning Methods</a>
+                <ul class="nav">
+                  <li>
+                    <a href="#partitioning-quadtree">Quadtree</a>
+                  </li>
+                  <li>
+                    <a href="#partitioning-grid">Grid</a>
+                  </li>
+                  <li>
+                    <a href="#partitioning-hashing">Hashing</a>
+                  </li>
+                  <li>
+                    <a href="#partitioning-pro-con">Pros and Cons</a>
+                  </li>
+                </ul>
+              </li>
+
+              <!-- Examples and details -->
+              <li>
+                <a class="section" href="#example">Examples</a>
+                <ul class="nav">
+                  <li>
+                    <a href="#example-none">No Partitioning</a>
+                  </li>
+                  <li>
+                    <a href="#example-quadtree">Quadtree</a>
+                  </li>
+                  <li>
+                    <a href="#example-grid">Grid</a>
+                  </li>
+                  <li>
+                    <a href="#example-hashing">Hashing</a>
+                  </li>
+                </ul>
+              </li>
+
+              <!-- Closing thoughts -->
+              <li>
+                <a class="section" href="#conclusion">Conclusion</a>
+                <ul class="nav">
+                  <li>
+                    <a href="#conclusion-methods">Other Methods</a>
+                  </li>
+                  <li>
+                    <a href="#conclusion-thoughts">Final Thoughs</a>
+                  </li>
+                  <li>
+                    <a href="#conclusion-credits">Credits</a>
+                  </li>
+                </ul>
+              </li>
+
+            </ul>
+          </nav>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Set up code highlighting -->
+    <script>hljs.initHighlightingOnLoad();</script>
+
+    <!-- Enable tooltips -->
+    <script>
+      $(function () {
+        $('[data-toggle="tooltip"]').tooltip({ 'container': 'body' });
+      });
+    </script>
+
+    <!-- Set up navigation collapse -->
+    <script>
+      var nav = $('#nav');
+      var content = $(window);
+
+      content.on("scroll", function(e) {
+        nav.css('margin-top', content.scrollTop() < 90 ? (100 - content.scrollTop()) + 'px' : '10px');
+      });
+    </script>
+
+    <!-- Spatial querying demo scripts -->
+    <script src="js/utility.js"></script>
+    <script src="js/basic.js"></script>
+    <script src="js/quadtree.js"></script>
+    <script src="js/grid.js"></script>
+    <script src="js/spatialhash.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/performance.js"></script>
+    <script src="js/simulation.js"></script>
+    <script src="js/demo.js"></script>
+    <script src="js/primary.js"></script>
+
+  </body>
+</html>
